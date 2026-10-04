@@ -1,7 +1,8 @@
 import type { PostgrestError, SupabaseClient } from '@supabase/supabase-js';
 import type { MeetingBotRow, SessionRow, Store } from './types.js';
 
-const SESSION_COLUMNS = 'id, org_id, workflow_id, kind, mode, phase, workmap_id, language, started_at, ended_at';
+const SESSION_COLUMNS =
+  'id, org_id, workflow_id, kind, mode, phase, workmap_id, language, off_record, started_at, ended_at';
 const BOT_COLUMNS = 'org_id, session_id, bot_id, platform, status, joined_at, left_at, error';
 
 function unwrap<T>({ data, error }: { data: T; error: PostgrestError | null }, what: string): T {

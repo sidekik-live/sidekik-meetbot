@@ -10,6 +10,7 @@ export type SessionRow = {
   phase: Phase;
   workmap_id: string | null;
   language: string;
+  off_record: boolean;
   started_at: string;
   ended_at: string | null;
 };

@@ -59,6 +59,12 @@ Nothing queues (DESIGN §4):
 
 A new sharer or a stopped share restarts ffmpeg at the next keyframe. ffmpeg must be on `PATH` (or set `FFMPEG_PATH`); `brew install ffmpeg` locally.
 
+### Off the record
+
+Meetbot follows lifecycle `offrecord_on/off` (and starts from `sessions.off_record` when the bot's socket opens). While a session is off the record, the decoder keeps running so resuming is instant, but no frame is sent to perception.
+
+In the meeting chat, a message starting with `/off` or `/on` (any case) calls gateway `POST /internal/sessions/:id/off-record {on, source: "chat"}` (500 ms budget), which records the span and publishes the lifecycle event to every service. Frames stop locally as soon as gateway accepts, without waiting for that event. The bot's own messages are ignored.
+
 Lifecycle `ended` releases the session's state. Sessions in `replay` mode are ignored.
 
 ## Recall

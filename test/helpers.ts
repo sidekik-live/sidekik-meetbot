@@ -26,6 +26,7 @@ export function sessionRow(overrides: Partial<SessionRow> = {}): SessionRow {
     phase: 'capture',
     workmap_id: null,
     language: 'de',
+    off_record: false,
     started_at: STARTED_AT,
     ended_at: null,
     ...overrides,
@@ -47,6 +48,11 @@ export function fakeGateway() {
   const fake = {
     fail: undefined as Error | undefined,
     tokens: [] as string[],
+    offRecords: [] as [string, boolean][],
+    async offRecord(sessionId: string, on: boolean) {
+      if (fake.fail) throw fake.fail;
+      fake.offRecords.push([sessionId, on]);
+    },
     async agentHostToken(sessionId: string) {
       if (fake.fail) throw fake.fail;
       const t = `t${++n}`;
