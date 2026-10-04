@@ -19,7 +19,7 @@
   },
   "dependencies": {
     "@fastify/websocket": "^11",
-    "@sidekik/contracts": "github:sidekik-live/sidekik-platform#v0.3.0",
+    "@sidekik/contracts": "github:sidekik-live/sidekik-platform#v0.3.1",
     "@supabase/supabase-js": "^2",
     "fastify": "^5",
     "fastify-type-provider-zod": "^7.0.0",
