@@ -17,12 +17,15 @@ export const envSchema = BaseServiceEnvSchema.extend({
   // Recall's workspace webhook verification secret (whsec_…), from the Recall dashboard.
   RECALL_WEBHOOK_SECRET: z.string().min(1),
 
+  // ws://perception…; meetbot sends decoded frames to {PERCEPTION_INTERNAL_URL}/internal/frames/:sid.
   PERCEPTION_INTERNAL_URL: url,
   GATEWAY_INTERNAL_URL: url,
   // The agent-host page Recall runs as the bot's camera: {APP_URL}/agent-host/{sid}?t=…
   APP_URL: url.default('https://app.sidekik.live'),
   // This service's public base URL; Recall connects to wss://{host}/recall/ws/:sid.
   PUBLIC_URL: url,
+  // ffmpeg decodes the screen share (the Docker image has it on PATH).
+  FFMPEG_PATH: z.string().min(1).default('ffmpeg'),
 });
 
 export type Env = z.infer<typeof envSchema>;

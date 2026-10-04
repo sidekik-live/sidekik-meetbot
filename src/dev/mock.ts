@@ -3,6 +3,7 @@
 import { randomUUID } from 'node:crypto';
 import { buildApp } from '../app.js';
 import { createBus } from '../contracts/index.js';
+import { screenPipeline } from '../frames/pipeline.js';
 import { loadEnv } from '../env.js';
 import { createServiceLogger } from '../logger.js';
 import { createBotBody, type RecallClient } from '../recall/client.js';
@@ -71,7 +72,14 @@ const store = memoryStore({
   ],
 });
 
-const app = await buildApp({ env, recall, gateway, store, bus, healthChecks: { redis: redis.check }, loggerInstance: log });
+// Frames go to a local perception (`pnpm dev:mock` there) if one is running; otherwise they're dropped.
+const screenSink = screenPipeline({
+  ffmpegPath: env.FFMPEG_PATH,
+  perceptionUrl: env.PERCEPTION_INTERNAL_URL,
+  internalToken: env.SK_INTERNAL_TOKEN,
+});
+
+const app = await buildApp({ env, recall, gateway, store, bus, screenSink, healthChecks: { redis: redis.check }, loggerInstance: log });
 app.addHook('onClose', () => bus.close());
 app.addHook('onClose', redis.close);
 
