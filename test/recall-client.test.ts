@@ -106,6 +106,21 @@ describe('httpRecallClient', () => {
     ]);
   });
 
+  it('reads a bot’s status history', async () => {
+    const { calls, impl } = fakeFetch(() =>
+      json(200, {
+        id: 'bot-123',
+        status_changes: [
+          { code: 'joining_call', message: null, created_at: '2026-10-04T10:00:00Z', sub_code: null },
+          { code: 'in_call_recording', message: null, created_at: '2026-10-04T10:00:20Z', sub_code: null },
+        ],
+      }),
+    );
+    const recall = httpRecallClient({ apiKey: 'key', region: 'us-east-1', fetchImpl: impl });
+    expect((await recall.statusChanges('bot-123')).map((c) => c.code)).toEqual(['joining_call', 'in_call_recording']);
+    expect(calls.map((c) => [c.method, c.url])).toEqual([['GET', 'https://us-east-1.recall.ai/api/v1/bot/bot-123/']]);
+  });
+
   it('surfaces Recall errors, bad answers and timeouts as 5xx', async () => {
     const rejecting = httpRecallClient({
       apiKey: 'key',

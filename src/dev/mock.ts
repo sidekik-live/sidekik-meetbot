@@ -48,6 +48,9 @@ const recall: RecallClient = {
   async leaveCall(botId) {
     log.info({ bot_id: botId }, 'mock recall: bot left the call');
   },
+  async statusChanges() {
+    return [];
+  },
 };
 
 const gateway: GatewayClient = {
