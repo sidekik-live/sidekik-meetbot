@@ -6,15 +6,17 @@ import {
   validatorCompiler,
   type ZodTypeProvider,
 } from 'fastify-type-provider-zod';
-import type { Bus } from './contracts/index.js';
+import { STREAMS, type Bus } from './contracts/index.js';
 import type { Env } from './env.js';
 import { HttpError } from './errors.js';
-import type { RecallClient } from './recall/client.js';
+import { BOT_NAME, type RecallClient } from './recall/client.js';
 import { healthRoutes, type HealthCheck } from './routes/health.js';
 import { internalRoutes } from './routes/internal.js';
 import { recallWebhookRoutes } from './routes/recall-webhook.js';
+import { recallWsRoutes } from './routes/recall-ws.js';
 import { createBotService } from './services/bots.js';
 import type { GatewayClient } from './services/gateway.js';
+import { createRealtimeHub, type ScreenSinkFactory } from './services/realtime.js';
 import { createStatusHandler } from './services/status.js';
 import type { Store } from './store/types.js';
 import { VERSION } from './version.js';
@@ -25,6 +27,8 @@ export type AppDeps = {
   gateway: GatewayClient;
   store: Store;
   bus: Bus;
+  /** Where screen-share video goes; defaults to dropping it. */
+  screenSink?: ScreenSinkFactory;
   healthChecks: Record<string, HealthCheck>;
   /** The service's shared pino logger (server, dev:mock); tests pass `logger` options instead. */
   loggerInstance?: FastifyBaseLogger;
@@ -80,6 +84,26 @@ export async function buildApp(deps: AppDeps) {
   await app.register(websocket, { options: { maxPayload: 8 * 1024 * 1024 } });
 
   const bots = createBotService({ env, store: deps.store, recall: deps.recall, gateway: deps.gateway });
+  const hub = createRealtimeHub({
+    bus: deps.bus,
+    botName: BOT_NAME,
+    screenSink: deps.screenSink ?? (() => ({ frame() {}, stop() {}, close() {} })),
+  });
+
+  // Bus consumers start once the app is ready and stop when it closes.
+  const stops: (() => void)[] = [];
+  app.addHook('onReady', async () => {
+    stops.push(
+      deps.bus.consume(STREAMS.lifecycle, async (ev) => {
+        if (ev.data.mode === 'replay') return;
+        if (ev.data.event === 'ended') hub.dispose(ev.session_id);
+      }),
+    );
+  });
+  app.addHook('onClose', async () => {
+    for (const stop of stops.splice(0)) stop();
+    hub.closeAll();
+  });
 
   await app.register(healthRoutes, { version: VERSION, checks: deps.healthChecks });
   await app.register(internalRoutes, { store: deps.store, bots, internalToken: env.SK_INTERNAL_TOKEN });
@@ -87,6 +111,7 @@ export async function buildApp(deps: AppDeps) {
     secret: env.RECALL_WEBHOOK_SECRET,
     onStatus: createStatusHandler({ store: deps.store, bus: deps.bus }),
   });
+  await app.register(recallWsRoutes, { store: deps.store, hub, secret: env.RECALL_WS_SECRET });
 
   return app;
 }
