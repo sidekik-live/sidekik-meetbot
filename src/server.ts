@@ -3,6 +3,8 @@ import { loadEnv } from './env.js';
 import { createServiceLogger } from './logger.js';
 import { httpRecallClient } from './recall/client.js';
 import { redisHealth } from './redis-health.js';
+import { httpGatewayClient } from './services/gateway.js';
+import { supabaseStore } from './store/supabase.js';
 import { createSupabase, supabaseHealth } from './supabase.js';
 
 const env = loadEnv();
@@ -13,6 +15,8 @@ const redis = redisHealth(env.REDIS_URL, log);
 const app = await buildApp({
   env,
   recall: httpRecallClient({ apiKey: env.RECALL_API_KEY, region: env.RECALL_REGION }),
+  gateway: httpGatewayClient(env.GATEWAY_INTERNAL_URL, env.SK_INTERNAL_TOKEN),
+  store: supabaseStore(supabase),
   healthChecks: {
     supabase: supabaseHealth(supabase),
     redis: redis.check,
