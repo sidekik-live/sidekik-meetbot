@@ -1,4 +1,5 @@
 import { buildApp } from './app.js';
+import { screenPipeline } from './frames/pipeline.js';
 import { createBus } from './contracts/index.js';
 import { loadEnv } from './env.js';
 import { createServiceLogger } from './logger.js';
@@ -20,6 +21,11 @@ const app = await buildApp({
   gateway: httpGatewayClient(env.GATEWAY_INTERNAL_URL, env.SK_INTERNAL_TOKEN),
   store: supabaseStore(supabase),
   bus,
+  screenSink: screenPipeline({
+    ffmpegPath: env.FFMPEG_PATH,
+    perceptionUrl: env.PERCEPTION_INTERNAL_URL,
+    internalToken: env.SK_INTERNAL_TOKEN,
+  }),
   healthChecks: {
     supabase: supabaseHealth(supabase),
     redis: redis.check,
