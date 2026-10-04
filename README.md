@@ -48,6 +48,17 @@ Recall opens one WebSocket per bot once it is recording (and retries every 3 s i
 | `video_separate_h264.data` | `type: screenshare` from the sharer → the screen sink (decoder → perception); webcams are ignored. A screen-share frame with no sharer tracked adopts its participant, since the socket can open after `screenshare_on`. |
 | `participant_events.chat_message` | chat commands (`/off`, `/on`) |
 
+### Screen frames
+
+The sharer's H.264 goes into one long-lived ffmpeg per session (`src/frames/decoder.ts`): raw Annex-B in, `fps=1` JPEGs (at most 1280 px wide) out. Raw H.264 has no timestamps, so ffmpeg stamps packets with the wall clock; the first JPEG arrives ~2.5 s after the share starts, then one per second. Each JPEG goes to perception `WS {PERCEPTION_INTERNAL_URL}/internal/frames/:sid` (`X-Internal-Token`) as `[uint32 BE header length][{"t_ms","reason":"tick"}][JPEG]`, with the session time of the latest access unit.
+
+Nothing queues (DESIGN §4):
+- until a keyframe (SPS or IDR) arrives, and whenever ffmpeg has more than 2 MB unread, access units are dropped and the decoder waits for the next keyframe;
+- a JPEG is dropped while the perception socket is down (it reconnects with backoff, 0.5–5 s) or still sending (> 512 KB buffered);
+- perception closing with `4410` (session ended) stops the link for good.
+
+A new sharer or a stopped share restarts ffmpeg at the next keyframe. ffmpeg must be on `PATH` (or set `FFMPEG_PATH`); `brew install ffmpeg` locally.
+
 Lifecycle `ended` releases the session's state. Sessions in `replay` mode are ignored.
 
 ## Recall
