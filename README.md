@@ -21,6 +21,7 @@ pnpm typecheck && pnpm test
 | `POST /internal/bots` | `X-Internal-Token` | `{session_id, meeting_url, bot_name?}` → `201 {bot_id}`. Gets a one-time agent-host token from gateway, creates the Recall bot and writes a `meeting_bots` row (`status: created`). A session with a live bot gets that bot back (`200`), also for concurrent retries. `404` unknown session, `409 session_ended` / `not_meeting_session`, `502`/`504` from Recall or gateway. |
 | `DELETE /internal/bots/:sid` | `X-Internal-Token` | Asks Recall to take the session's live bot out of the call (`status: leave_requested`); `left_at` is set when Recall reports the call ended. Always `204`. |
 | `POST /recall/webhook` | Recall signature | Bot status changes (Svix). Verified with `RECALL_WEBHOOK_SECRET` (`webhook-*` or `svix-*` headers, 5-minute tolerance); `401` otherwise. Subscribe the endpoint to every `bot.*` event in the Recall dashboard. |
+| `WS /recall/ws/:sid/?secret=` | `RECALL_WS_SECRET` | Recall's real-time events for the session's bot (see below). `401` bad secret, `404` unknown, ended or non-meeting session. |
 | `GET /healthz` | none | `{ok, version, deps}` |
 
 Status changes map to `meeting_bots` and the bus:
@@ -35,6 +36,19 @@ Status changes map to `meeting_bots` and the bus:
 Each transition happens once, and event ids derive from the webhook id, so redelivered webhooks are harmless. If publishing fails the webhook answers 500 without writing the row, and Svix retries.
 
 `meeting_bots.platform` comes from the meeting URL's host (`google_meet`, `zoom`, `teams`, `unknown`).
+
+## Real-time events
+
+Recall opens one WebSocket per bot once it is recording (and retries every 3 s if it drops; per-session state survives a reconnect for 60 s). Meetbot pings every 30 s so Cloudflare doesn't close it as idle.
+
+| Recall event | Effect |
+|---|---|
+| `participant_events.speech_on/off` | `sk:speech.signals` `{kind: user_speech_start/end, source: recall}`; the bot's own participant (matched by name, since Recall has no bot flag) is ignored |
+| `participant_events.screenshare_on/off` | tracks who is sharing; switching sharer or stopping resets the decoder |
+| `video_separate_h264.data` | `type: screenshare` from the sharer → the screen sink (decoder → perception); webcams are ignored. A screen-share frame with no sharer tracked adopts its participant, since the socket can open after `screenshare_on`. |
+| `participant_events.chat_message` | chat commands (`/off`, `/on`) |
+
+Lifecycle `ended` releases the session's state. Sessions in `replay` mode are ignored.
 
 ## Recall
 
