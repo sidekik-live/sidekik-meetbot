@@ -14,6 +14,18 @@ pnpm typecheck && pnpm test
 
 `GET /healthz` returns `{ok, version, deps}` (Redis, Supabase).
 
+## Try it in a real meeting
+
+1. Run meetbot with a public URL Recall can reach (`cloudflared tunnel --url http://localhost:8086`, then `PUBLIC_URL=https://<tunnel>` in `.env`), plus gateway and perception.
+2. In the Recall dashboard, point the webhook at `{PUBLIC_URL}/recall/webhook` (all `bot.*` events) and copy the workspace verification secret to `RECALL_WEBHOOK_SECRET`.
+3. Create a meeting-mode session in gateway (`POST /v1/sessions {mode: "meeting"}` and its consent), then:
+
+```bash
+pnpm join https://meet.google.com/abc-defg-hij --session <session-id>
+```
+
+The script asks meetbot for the bot and prints Recall's status changes until the bot is done (needs `RECALL_API_KEY`, `RECALL_REGION`). Admit "Sidekik (recording)" in Meet. Ctrl+C, or `pnpm join --leave <session-id>`, takes it out of the call.
+
 ## Endpoints
 
 | Route | Auth | What |
@@ -76,3 +88,23 @@ Lifecycle `ended` releases the session's state. Sessions in `replay` mode are ig
 - `metadata: {session_id}` comes back on every status webhook and real-time event;
 - `recording_config.retention: null` keeps media in memory only, so there are no recordings to delete after a test;
 - there is no screen-share-only stream: screen share arrives as `video_separate_h264.data` with `type: "screenshare"`.
+
+## Deploy
+
+Railway service `sidekik-meetbot` from this repo's `Dockerfile` (`node:22-slim` + `ffmpeg`, runs as `node`, `HEALTHCHECK` on `/healthz`), public host `bot.sidekik.live` (Cloudflare proxied). It listens on `::` at `PORT` (8086). If `sidekik-platform` is private, set `NPM_GITHUB_TOKEN` as a build variable.
+
+| Variable | Value in production |
+|---|---|
+| `PORT` | `8086` |
+| `LOG_LEVEL` | `info` |
+| `REDIS_URL` | Railway Redis |
+| `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | the Supabase project, secret key |
+| `SK_INTERNAL_TOKEN` | shared |
+| `RECALL_API_KEY`, `RECALL_REGION` | the Recall key and its region (`us-east-1`) |
+| `RECALL_WS_SECRET` | `openssl rand -hex 32` |
+| `RECALL_WEBHOOK_SECRET` | Recall workspace verification secret (`whsec_…`) |
+| `PERCEPTION_INTERNAL_URL` | `ws://sidekik-perception.railway.internal:8081` |
+| `GATEWAY_INTERNAL_URL` | `http://sidekik-gateway.railway.internal:8080` |
+| `APP_URL` | `https://app.sidekik.live` |
+| `PUBLIC_URL` | `https://bot.sidekik.live` |
+| `FFMPEG_PATH` | unset (on `PATH` in the image) |

@@ -15,7 +15,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "dev:mock": "tsx watch src/dev/mock.ts"
+    "dev:mock": "tsx watch src/dev/mock.ts",
+    "join": "tsx --env-file-if-exists=.env scripts/join.ts"
   },
   "dependencies": {
     "@fastify/websocket": "^11",

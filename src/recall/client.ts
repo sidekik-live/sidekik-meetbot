@@ -69,11 +69,22 @@ const withSlash = (base: string) => (base.endsWith('/') ? base : `${base}/`);
 
 const BotSchema = z.object({ id: z.string().min(1) });
 
+/** A bot's status history (Bot.status_changes), oldest first. */
+export type StatusChange = { code: string; sub_code: string | null; created_at: string };
+const BotStatusSchema = z.object({
+  id: z.string().min(1),
+  status_changes: z
+    .array(z.object({ code: z.string(), sub_code: z.string().nullish(), created_at: z.string() }))
+    .default([]),
+});
+
 export interface RecallClient {
   /** Creates a bot that joins the meeting now; returns Recall's bot id. */
   createBot(input: CreateBotInput): Promise<{ id: string }>;
   /** Removes the bot from the call. Irreversible. */
   leaveCall(botId: string): Promise<void>;
+  /** The bot's status history (scripts/join.ts watches it). */
+  statusChanges(botId: string): Promise<StatusChange[]>;
 }
 
 export type RecallClientOptions = {
@@ -90,11 +101,11 @@ export function httpRecallClient(opts: RecallClientOptions): RecallClient {
   const timeoutMs = opts.timeoutMs ?? 2500;
   const fetchImpl = opts.fetchImpl ?? fetch;
 
-  async function post(path: string, body?: unknown): Promise<unknown> {
+  async function call(method: 'GET' | 'POST', path: string, body?: unknown): Promise<unknown> {
     let res: Response;
     try {
       res = await fetchImpl(new URL(path, base), {
-        method: 'POST',
+        method,
         headers: {
           authorization: `Token ${opts.apiKey}`,
           accept: 'application/json',
@@ -119,12 +130,17 @@ export function httpRecallClient(opts: RecallClientOptions): RecallClient {
 
   return {
     async createBot(input) {
-      const parsed = BotSchema.safeParse(await post('bot/', createBotBody(input)));
+      const parsed = BotSchema.safeParse(await call('POST', 'bot/', createBotBody(input)));
       if (!parsed.success) throw new HttpError(502, 'recall_bad_response', 'Recall bot/ returned no bot id');
       return { id: parsed.data.id };
     },
     async leaveCall(botId) {
-      await post(`bot/${encodeURIComponent(botId)}/leave_call/`);
+      await call('POST', `bot/${encodeURIComponent(botId)}/leave_call/`);
+    },
+    async statusChanges(botId) {
+      const parsed = BotStatusSchema.safeParse(await call('GET', `bot/${encodeURIComponent(botId)}/`));
+      if (!parsed.success) throw new HttpError(502, 'recall_bad_response', 'Recall bot/ returned an unexpected body');
+      return parsed.data.status_changes.map((c) => ({ code: c.code, sub_code: c.sub_code ?? null, created_at: c.created_at }));
     },
   };
 }

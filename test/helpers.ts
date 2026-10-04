@@ -106,6 +106,9 @@ export function fakeRecall() {
       if (fake.fail) throw fake.fail;
       left.push(botId);
     },
+    async statusChanges() {
+      return [];
+    },
   };
   return fake;
 }
