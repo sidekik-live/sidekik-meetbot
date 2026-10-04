@@ -1,4 +1,5 @@
 import { buildApp, type AppDeps } from '../src/app.js';
+import { streamEnvelopeSchema, type Bus, type Envelope, type StreamKey } from '../src/contracts/index.js';
 import { loadEnv, type Env } from '../src/env.js';
 import type { RecallClient } from '../src/recall/client.js';
 import type { GatewayClient } from '../src/services/gateway.js';
@@ -103,12 +104,47 @@ export function fakeRecall() {
   return fake;
 }
 
+type Handler = (ev: Envelope<unknown>) => Promise<void>;
+
+/** Records published events (validated like the real bus); `deliver` feeds a consumer. */
+export function fakeBus() {
+  const published: { stream: StreamKey; ev: Envelope<unknown> }[] = [];
+  const handlers = new Map<StreamKey, Handler>();
+  const bus: Bus & {
+    published: typeof published;
+    fail?: Error;
+    deliver(stream: StreamKey, ev: Envelope<unknown>): Promise<void>;
+    events(stream: StreamKey): Envelope<unknown>[];
+  } = {
+    published,
+    async publish(stream, ev) {
+      if (bus.fail) throw bus.fail;
+      streamEnvelopeSchema(stream).parse(ev);
+      published.push({ stream, ev });
+      return `${published.length}-0`;
+    },
+    consume(stream, handler) {
+      handlers.set(stream, handler as Handler);
+      return () => handlers.delete(stream);
+    },
+    async deliver(stream, ev) {
+      const handler = handlers.get(stream);
+      if (!handler) throw new Error(`no consumer for ${stream}`);
+      await handler(ev);
+    },
+    events: (stream) => published.filter((p) => p.stream === stream).map((p) => p.ev),
+    async close() {},
+  };
+  return bus;
+}
+
 export function buildTestApp(overrides: Partial<AppDeps> = {}) {
   return buildApp({
     env: testEnv(),
     recall: fakeRecall(),
     gateway: fakeGateway(),
     store: seededStore(),
+    bus: fakeBus(),
     healthChecks: {},
     logger: false,
     ...overrides,

@@ -6,13 +6,16 @@ import {
   validatorCompiler,
   type ZodTypeProvider,
 } from 'fastify-type-provider-zod';
+import type { Bus } from './contracts/index.js';
 import type { Env } from './env.js';
 import { HttpError } from './errors.js';
 import type { RecallClient } from './recall/client.js';
 import { healthRoutes, type HealthCheck } from './routes/health.js';
 import { internalRoutes } from './routes/internal.js';
+import { recallWebhookRoutes } from './routes/recall-webhook.js';
 import { createBotService } from './services/bots.js';
 import type { GatewayClient } from './services/gateway.js';
+import { createStatusHandler } from './services/status.js';
 import type { Store } from './store/types.js';
 import { VERSION } from './version.js';
 
@@ -21,6 +24,7 @@ export type AppDeps = {
   recall: RecallClient;
   gateway: GatewayClient;
   store: Store;
+  bus: Bus;
   healthChecks: Record<string, HealthCheck>;
   /** The service's shared pino logger (server, dev:mock); tests pass `logger` options instead. */
   loggerInstance?: FastifyBaseLogger;
@@ -79,6 +83,10 @@ export async function buildApp(deps: AppDeps) {
 
   await app.register(healthRoutes, { version: VERSION, checks: deps.healthChecks });
   await app.register(internalRoutes, { store: deps.store, bots, internalToken: env.SK_INTERNAL_TOKEN });
+  await app.register(recallWebhookRoutes, {
+    secret: env.RECALL_WEBHOOK_SECRET,
+    onStatus: createStatusHandler({ store: deps.store, bus: deps.bus }),
+  });
 
   return app;
 }

@@ -2,6 +2,7 @@
 // stand-in that logs the bot it would create; Redis comes from sidekik-platform's docker-compose.
 import { randomUUID } from 'node:crypto';
 import { buildApp } from '../app.js';
+import { createBus } from '../contracts/index.js';
 import { loadEnv } from '../env.js';
 import { createServiceLogger } from '../logger.js';
 import { createBotBody, type RecallClient } from '../recall/client.js';
@@ -33,6 +34,7 @@ const env = loadEnv({
   ...process.env,
 });
 const log = createServiceLogger(env.LOG_LEVEL);
+const bus = createBus(env.REDIS_URL, 'meetbot', { logger: log.child({ component: 'bus' }) });
 const redis = redisHealth(env.REDIS_URL, log);
 
 const recall: RecallClient = {
@@ -69,7 +71,8 @@ const store = memoryStore({
   ],
 });
 
-const app = await buildApp({ env, recall, gateway, store, healthChecks: { redis: redis.check }, loggerInstance: log });
+const app = await buildApp({ env, recall, gateway, store, bus, healthChecks: { redis: redis.check }, loggerInstance: log });
+app.addHook('onClose', () => bus.close());
 app.addHook('onClose', redis.close);
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {

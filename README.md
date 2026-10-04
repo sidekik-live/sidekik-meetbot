@@ -20,7 +20,19 @@ pnpm typecheck && pnpm test
 |---|---|---|
 | `POST /internal/bots` | `X-Internal-Token` | `{session_id, meeting_url, bot_name?}` → `201 {bot_id}`. Gets a one-time agent-host token from gateway, creates the Recall bot and writes a `meeting_bots` row (`status: created`). A session with a live bot gets that bot back (`200`), also for concurrent retries. `404` unknown session, `409 session_ended` / `not_meeting_session`, `502`/`504` from Recall or gateway. |
 | `DELETE /internal/bots/:sid` | `X-Internal-Token` | Asks Recall to take the session's live bot out of the call (`status: leave_requested`); `left_at` is set when Recall reports the call ended. Always `204`. |
+| `POST /recall/webhook` | Recall signature | Bot status changes (Svix). Verified with `RECALL_WEBHOOK_SECRET` (`webhook-*` or `svix-*` headers, 5-minute tolerance); `401` otherwise. Subscribe the endpoint to every `bot.*` event in the Recall dashboard. |
 | `GET /healthz` | none | `{ok, version, deps}` |
+
+Status changes map to `meeting_bots` and the bus:
+
+| Recall `code` | Row | Published |
+|---|---|---|
+| `in_call_recording` | `joined_at` | `bot_joined` |
+| `fatal`, `recording_permission_denied` | `error` = sub code | `bot_error` (`reason` = sub code) |
+| `call_ended`, `done`, `fatal` | `left_at` | `bot_left` (`reason` = sub code), plus `sk:usage`: hours from `joined_at`, priced as `recall/bot_web_4_core` ($0.60/h) |
+| anything else | `status` | nothing |
+
+Each transition happens once, and event ids derive from the webhook id, so redelivered webhooks are harmless. If publishing fails the webhook answers 500 without writing the row, and Svix retries.
 
 `meeting_bots.platform` comes from the meeting URL's host (`google_meet`, `zoom`, `teams`, `unknown`).
 
