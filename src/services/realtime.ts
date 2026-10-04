@@ -34,6 +34,8 @@ export type RealtimeHubDeps = {
   botName: string;
   screenSink: ScreenSinkFactory;
   onChat?: ChatHandler;
+  /** A session's first socket opened. */
+  onOpen?: (session: SessionRow) => void;
   /** How long state outlives a dropped socket, since Recall retries every 3 s. */
   graceMs?: number;
 };
@@ -103,6 +105,7 @@ export function createRealtimeHub(deps: RealtimeHubDeps) {
         stats: { messages: 0, frames: 0, ignored: 0, speech: 0 },
       };
       sessions.set(session.id, live);
+      deps.onOpen?.(session);
       return live;
     },
 

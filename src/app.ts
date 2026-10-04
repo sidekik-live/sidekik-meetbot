@@ -16,6 +16,8 @@ import { recallWebhookRoutes } from './routes/recall-webhook.js';
 import { recallWsRoutes } from './routes/recall-ws.js';
 import { createBotService } from './services/bots.js';
 import type { GatewayClient } from './services/gateway.js';
+import { chatCommands } from './services/chat.js';
+import { OffRecordState } from './services/off-record.js';
 import { createRealtimeHub, type ScreenSinkFactory } from './services/realtime.js';
 import { createStatusHandler } from './services/status.js';
 import type { Store } from './store/types.js';
@@ -29,6 +31,8 @@ export type AppDeps = {
   bus: Bus;
   /** Where screen-share video goes; defaults to dropping it. */
   screenSink?: ScreenSinkFactory;
+  /** Shared with the screen pipeline, which stops sending frames while a session is off. */
+  offRecord?: OffRecordState;
   healthChecks: Record<string, HealthCheck>;
   /** The service's shared pino logger (server, dev:mock); tests pass `logger` options instead. */
   loggerInstance?: FastifyBaseLogger;
@@ -84,10 +88,15 @@ export async function buildApp(deps: AppDeps) {
   await app.register(websocket, { options: { maxPayload: 8 * 1024 * 1024 } });
 
   const bots = createBotService({ env, store: deps.store, recall: deps.recall, gateway: deps.gateway });
+  const offRecord = deps.offRecord ?? new OffRecordState();
   const hub = createRealtimeHub({
     bus: deps.bus,
     botName: BOT_NAME,
     screenSink: deps.screenSink ?? (() => ({ frame() {}, stop() {}, close() {} })),
+    onChat: chatCommands({ gateway: deps.gateway, offRecord }),
+    onOpen: (session) => {
+      if (session.off_record) offRecord.set(session.id, true);
+    },
   });
 
   // Bus consumers start once the app is ready and stop when it closes.
@@ -96,7 +105,14 @@ export async function buildApp(deps: AppDeps) {
     stops.push(
       deps.bus.consume(STREAMS.lifecycle, async (ev) => {
         if (ev.data.mode === 'replay') return;
-        if (ev.data.event === 'ended') hub.dispose(ev.session_id);
+        if (ev.data.event === 'offrecord_on' || ev.data.event === 'offrecord_off') {
+          offRecord.set(ev.session_id, ev.data.event === 'offrecord_on');
+          hub.get(ev.session_id)?.log.info({ off_record: ev.data.event === 'offrecord_on' }, 'off-record changed');
+        }
+        if (ev.data.event === 'ended') {
+          hub.dispose(ev.session_id);
+          offRecord.forget(ev.session_id);
+        }
       }),
     );
   });

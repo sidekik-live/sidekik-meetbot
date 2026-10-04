@@ -6,6 +6,7 @@ import { createServiceLogger } from './logger.js';
 import { httpRecallClient } from './recall/client.js';
 import { redisHealth } from './redis-health.js';
 import { httpGatewayClient } from './services/gateway.js';
+import { OffRecordState } from './services/off-record.js';
 import { supabaseStore } from './store/supabase.js';
 import { createSupabase, supabaseHealth } from './supabase.js';
 
@@ -14,6 +15,7 @@ const supabase = createSupabase(env);
 const log = createServiceLogger(env.LOG_LEVEL);
 const bus = createBus(env.REDIS_URL, 'meetbot', { logger: log.child({ component: 'bus' }) });
 const redis = redisHealth(env.REDIS_URL, log);
+const offRecord = new OffRecordState();
 
 const app = await buildApp({
   env,
@@ -25,7 +27,9 @@ const app = await buildApp({
     ffmpegPath: env.FFMPEG_PATH,
     perceptionUrl: env.PERCEPTION_INTERNAL_URL,
     internalToken: env.SK_INTERNAL_TOKEN,
+    forwarding: (sid) => !offRecord.isOff(sid),
   }),
+  offRecord,
   healthChecks: {
     supabase: supabaseHealth(supabase),
     redis: redis.check,

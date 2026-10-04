@@ -1,4 +1,4 @@
-import type { z } from 'zod';
+import { z } from 'zod';
 import { AgentHostTokenResponseSchema, INTERNAL_TOKEN_HEADER } from '../contracts/index.js';
 import { HttpError } from '../errors.js';
 
@@ -8,6 +8,8 @@ export const BUDGET_MS = { agentHostToken: 200, offRecord: 500 } as const;
 export interface GatewayClient {
   /** A one-time token for the agent-host page the bot runs as its camera. */
   agentHostToken(sessionId: string): Promise<string>;
+  /** Sets the session off (`true`) or back on the record, from a meeting chat command. */
+  offRecord(sessionId: string, on: boolean): Promise<void>;
 }
 
 export function httpGatewayClient(baseUrl: string, internalToken: string): GatewayClient {
@@ -41,6 +43,14 @@ export function httpGatewayClient(baseUrl: string, internalToken: string): Gatew
         BUDGET_MS.agentHostToken,
       );
       return t;
+    },
+    async offRecord(sessionId, on) {
+      await post(
+        `/internal/sessions/${encodeURIComponent(sessionId)}/off-record`,
+        { on, source: 'chat' },
+        z.record(z.string(), z.unknown()),
+        BUDGET_MS.offRecord,
+      );
     },
   };
 }

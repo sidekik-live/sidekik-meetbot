@@ -54,3 +54,13 @@ describe('httpGatewayClient.agentHostToken', () => {
     server!.closeAllConnections();
   });
 });
+
+describe('httpGatewayClient.offRecord', () => {
+  it('posts a chat off-record request for the session', async () => {
+    const { seen, url } = await gateway(() => [200, { off_record: true }]);
+    await httpGatewayClient(url, TOKEN).offRecord('sid-1', true);
+    expect(seen).toEqual([
+      { method: 'POST', url: '/internal/sessions/sid-1/off-record', token: TOKEN, body: { on: true, source: 'chat' } },
+    ]);
+  });
+});

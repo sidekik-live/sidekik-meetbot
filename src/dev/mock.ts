@@ -9,6 +9,7 @@ import { createServiceLogger } from '../logger.js';
 import { createBotBody, type RecallClient } from '../recall/client.js';
 import { redisHealth } from '../redis-health.js';
 import type { GatewayClient } from '../services/gateway.js';
+import { OffRecordState } from '../services/off-record.js';
 import { memoryStore } from '../store/memory.js';
 
 export const MOCK = {
@@ -53,6 +54,9 @@ const gateway: GatewayClient = {
   async agentHostToken() {
     return `mock-agent-host-token-${randomUUID()}`;
   },
+  async offRecord(sessionId, on) {
+    log.info({ session_id: sessionId, off_record: on }, 'mock gateway: off-record from chat');
+  },
 };
 
 const store = memoryStore({
@@ -66,6 +70,7 @@ const store = memoryStore({
       phase: 'capture',
       workmap_id: null,
       language: 'de',
+      off_record: false,
       started_at: new Date().toISOString(),
       ended_at: null,
     },
@@ -73,13 +78,15 @@ const store = memoryStore({
 });
 
 // Frames go to a local perception (`pnpm dev:mock` there) if one is running; otherwise they're dropped.
+const offRecord = new OffRecordState();
 const screenSink = screenPipeline({
   ffmpegPath: env.FFMPEG_PATH,
   perceptionUrl: env.PERCEPTION_INTERNAL_URL,
   internalToken: env.SK_INTERNAL_TOKEN,
+  forwarding: (sid) => !offRecord.isOff(sid),
 });
 
-const app = await buildApp({ env, recall, gateway, store, bus, screenSink, healthChecks: { redis: redis.check }, loggerInstance: log });
+const app = await buildApp({ env, recall, gateway, store, bus, screenSink, offRecord, healthChecks: { redis: redis.check }, loggerInstance: log });
 app.addHook('onClose', () => bus.close());
 app.addHook('onClose', redis.close);
 
