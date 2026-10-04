@@ -28,7 +28,7 @@ Meetbot lets Sidekik join Google Meet, Zoom or Teams as a participant through **
 
 | Destination | Detail |
 |---|---|
-| `WS perception /internal/frames/:sid` | 1 fps JPEG with header `{t_ms, reason:"tick"}` |
+| `WS perception /internal/frames/:sid` | 1 fps JPEG with header `{t_ms, reason:"tick"}`: header length as a big-endian uint32, the JSON header, then the JPEG bytes. `X-Internal-Token` on the upgrade. |
 | `sk:speech.signals` | `{kind:"user_speech_start"\|"user_speech_end", source:"recall"}`, ignoring the bot's own participant ID |
 | `sk:session.lifecycle` | `bot_joined`, `bot_left`, `bot_error` (with reason) |
 | `sk:usage` | Recall hours × $0.50 |
