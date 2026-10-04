@@ -14,6 +14,16 @@ pnpm typecheck && pnpm test
 
 `GET /healthz` returns `{ok, version, deps}` (Redis, Supabase).
 
+## Endpoints
+
+| Route | Auth | What |
+|---|---|---|
+| `POST /internal/bots` | `X-Internal-Token` | `{session_id, meeting_url, bot_name?}` → `201 {bot_id}`. Gets a one-time agent-host token from gateway, creates the Recall bot and writes a `meeting_bots` row (`status: created`). A session with a live bot gets that bot back (`200`), also for concurrent retries. `404` unknown session, `409 session_ended` / `not_meeting_session`, `502`/`504` from Recall or gateway. |
+| `DELETE /internal/bots/:sid` | `X-Internal-Token` | Asks Recall to take the session's live bot out of the call (`status: leave_requested`); `left_at` is set when Recall reports the call ended. Always `204`. |
+| `GET /healthz` | none | `{ok, version, deps}` |
+
+`meeting_bots.platform` comes from the meeting URL's host (`google_meet`, `zoom`, `teams`, `unknown`).
+
 ## Recall
 
 `src/recall/client.ts` wraps the Recall REST API (`https://{RECALL_REGION}.recall.ai/api/v1`, `Authorization: Token …`). The Create Bot body was checked against docs.recall.ai on 2026-10-04 and differs from DESIGN §3 in a few places:

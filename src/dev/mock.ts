@@ -6,6 +6,15 @@ import { loadEnv } from '../env.js';
 import { createServiceLogger } from '../logger.js';
 import { createBotBody, type RecallClient } from '../recall/client.js';
 import { redisHealth } from '../redis-health.js';
+import type { GatewayClient } from '../services/gateway.js';
+import { memoryStore } from '../store/memory.js';
+
+export const MOCK = {
+  org: '00000000-0000-4000-8000-00000000a001',
+  workflow: '00000000-0000-4000-8000-00000000b001',
+  // A capture session in meeting mode (gateway's mock uses …d001 for its browser session).
+  session: '00000000-0000-4000-8000-00000000d003',
+};
 
 const DEV_SECRET = 'dev-mock-secret-not-for-production-0000000000';
 const env = loadEnv({
@@ -37,7 +46,30 @@ const recall: RecallClient = {
   },
 };
 
-const app = await buildApp({ env, recall, healthChecks: { redis: redis.check }, loggerInstance: log });
+const gateway: GatewayClient = {
+  async agentHostToken() {
+    return `mock-agent-host-token-${randomUUID()}`;
+  },
+};
+
+const store = memoryStore({
+  sessions: [
+    {
+      id: MOCK.session,
+      org_id: MOCK.org,
+      workflow_id: MOCK.workflow,
+      kind: 'capture',
+      mode: 'meeting',
+      phase: 'capture',
+      workmap_id: null,
+      language: 'de',
+      started_at: new Date().toISOString(),
+      ended_at: null,
+    },
+  ],
+});
+
+const app = await buildApp({ env, recall, gateway, store, healthChecks: { redis: redis.check }, loggerInstance: log });
 app.addHook('onClose', redis.close);
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
@@ -48,4 +80,11 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
 }
 
 await app.listen({ host: '::', port: env.PORT });
-app.log.info({ internal_token: env.SK_INTERNAL_TOKEN }, 'mock meetbot ready');
+app.log.info(
+  {
+    session_id: MOCK.session,
+    internal_token: env.SK_INTERNAL_TOKEN,
+    try: `curl -X POST localhost:${env.PORT}/internal/bots -H 'x-internal-token: ${env.SK_INTERNAL_TOKEN}' -H 'content-type: application/json' -d '{"session_id":"${MOCK.session}","meeting_url":"https://meet.google.com/abc-defg-hij"}'`,
+  },
+  'mock meetbot ready',
+);

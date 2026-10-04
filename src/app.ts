@@ -10,11 +10,17 @@ import type { Env } from './env.js';
 import { HttpError } from './errors.js';
 import type { RecallClient } from './recall/client.js';
 import { healthRoutes, type HealthCheck } from './routes/health.js';
+import { internalRoutes } from './routes/internal.js';
+import { createBotService } from './services/bots.js';
+import type { GatewayClient } from './services/gateway.js';
+import type { Store } from './store/types.js';
 import { VERSION } from './version.js';
 
 export type AppDeps = {
   env: Env;
   recall: RecallClient;
+  gateway: GatewayClient;
+  store: Store;
   healthChecks: Record<string, HealthCheck>;
   /** The service's shared pino logger (server, dev:mock); tests pass `logger` options instead. */
   loggerInstance?: FastifyBaseLogger;
@@ -69,7 +75,10 @@ export async function buildApp(deps: AppDeps) {
   // Recall sends one H.264 access unit per message; a screen-share keyframe can be a few hundred KB.
   await app.register(websocket, { options: { maxPayload: 8 * 1024 * 1024 } });
 
+  const bots = createBotService({ env, store: deps.store, recall: deps.recall, gateway: deps.gateway });
+
   await app.register(healthRoutes, { version: VERSION, checks: deps.healthChecks });
+  await app.register(internalRoutes, { store: deps.store, bots, internalToken: env.SK_INTERNAL_TOKEN });
 
   return app;
 }

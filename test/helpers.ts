@@ -1,6 +1,60 @@
 import { buildApp, type AppDeps } from '../src/app.js';
 import { loadEnv, type Env } from '../src/env.js';
 import type { RecallClient } from '../src/recall/client.js';
+import type { GatewayClient } from '../src/services/gateway.js';
+import { memoryStore } from '../src/store/memory.js';
+import type { SessionRow } from '../src/store/types.js';
+
+export const IDS = {
+  org: '00000000-0000-4000-8000-00000000a001',
+  workflow: '00000000-0000-4000-8000-00000000b001',
+  session: '00000000-0000-4000-8000-00000000d001',
+  browser: '00000000-0000-4000-8000-00000000d002',
+  ended: '00000000-0000-4000-8000-00000000d003',
+};
+
+export const STARTED_AT = '2026-10-04T10:00:00.000Z';
+
+export function sessionRow(overrides: Partial<SessionRow> = {}): SessionRow {
+  return {
+    id: IDS.session,
+    org_id: IDS.org,
+    workflow_id: IDS.workflow,
+    kind: 'capture',
+    mode: 'meeting',
+    phase: 'capture',
+    workmap_id: null,
+    language: 'de',
+    started_at: STARTED_AT,
+    ended_at: null,
+    ...overrides,
+  };
+}
+
+export const seededStore = () =>
+  memoryStore({
+    sessions: [
+      sessionRow(),
+      sessionRow({ id: IDS.browser, mode: 'browser' }),
+      sessionRow({ id: IDS.ended, ended_at: '2026-10-04T11:00:00.000Z' }),
+    ],
+  });
+
+/** Hands out numbered one-time tokens; `fail` makes the next calls throw. */
+export function fakeGateway() {
+  let n = 0;
+  const fake = {
+    fail: undefined as Error | undefined,
+    tokens: [] as string[],
+    async agentHostToken(sessionId: string) {
+      if (fake.fail) throw fake.fail;
+      const t = `t${++n}`;
+      fake.tokens.push(`${sessionId}:${t}`);
+      return t;
+    },
+  } satisfies GatewayClient & Record<string, unknown>;
+  return fake;
+}
 
 export const SECRETS = {
   internal: 'i'.repeat(64),
@@ -53,6 +107,8 @@ export function buildTestApp(overrides: Partial<AppDeps> = {}) {
   return buildApp({
     env: testEnv(),
     recall: fakeRecall(),
+    gateway: fakeGateway(),
+    store: seededStore(),
     healthChecks: {},
     logger: false,
     ...overrides,
